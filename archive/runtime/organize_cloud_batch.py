@@ -42,6 +42,10 @@ def episode(name,season):
 
 def subtitle_suffix(suffix):
     lower=suffix.casefold().strip('.')
+    # Keep alternate subtitle renditions distinct, with only one default track.
+    if re.search(r'(?:^|[._-])al(?:$|[._-])',lower):
+        base=re.sub(r'(^|[._-])al(?=$|[._-])',r'\1',lower).strip('._-')
+        return subtitle_suffix(base).removesuffix('.default')+'.al'
     bilingual=any(x in lower for x in ('jp','jap','双语'))
     if any(x in lower for x in ('tvb','粵','粤')):return '.yue.粤语字幕'
     if any(x in lower for x in ('tc','cht','big5','繁')):return '.zh-Hant'+('.中日双语' if bilingual else '')

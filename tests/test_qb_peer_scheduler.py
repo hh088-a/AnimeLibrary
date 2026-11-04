@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory() as td,patch.object(batch,'DATA',Path(td)):
     batch.maintain_downloads(q,state,now=10000)
     assert not any(r=='torrents/start' for r,_ in q.calls)
     state['tasks']['a'*40]=task('waiting_for_peers',retry_after=0)
-    for i in range(batch.MAX_ACTIVE):state['tasks'][str(i)]=task()
+    for i in range(batch.MAX_ACTIVE):state['tasks'][str(i)]=dict(task(),source_hash=f'{i:040x}')
     q=QB([torrent()]);batch.maintain_downloads(q,state,now=10000)
     assert state['tasks']['a'*40]['status']=='waiting_for_peers'
     assert not any(r=='torrents/start' for r,_ in q.calls)

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-05",
+  "player": {
+    "transport": "authenticated loopback HTTP",
+    "port": 18097,
+    "exclusive_listener": true,
+    "movie_click_verified": true,
+    "episode_click_verified": true,
+    "progress_sync": false,
+    "local_codec_components_added": true
+  },
+  "qb": {
+    "parallel": 100,
+    "connection_attempts_per_second": 60,
+    "announce_all_existing_trackers": true,
+    "before_sample_MiBps": 5.83,
+    "settled_sample_MiBps": 10.16,
+    "sample_seconds": 120,
+    "causal_speedup_not_guaranteed": true
+  },
+  "manual_organization": {
+    "batches": 9,
+    "episodes": 33,
+    "subtitles": 56,
+    "original_files_verified": 151
+  }
+}

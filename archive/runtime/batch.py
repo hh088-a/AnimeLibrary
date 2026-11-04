@@ -388,7 +388,13 @@ def maintain_downloads(qb,state,now=None):
     now=time.time() if now is None else now
     torrents={t['hash']:t for t in qb.call('torrents/info')}
     slots=active_downloads(state)
-    for key,t in state['tasks'].items():
+    # Release idle slots before choosing retries, rather than favoring ledger order.
+    def retry_order(pair):
+        key,t=pair;q=torrents.get(t.get('source_hash',key),{})
+        if t['status']!='waiting_for_peers':return (0,0,0,0)
+        seeds=max(0,q.get('num_complete',0))
+        return (1,-int(seeds>0),t.get('retry_after',now+1800),-seeds)
+    for key,t in sorted(state['tasks'].items(),key=retry_order):
         if t['status'] in ('cloud_verified','abandoned','source_replaced'):continue
         h=t.get('source_hash',key);q=torrents.get(h)
         if not q:continue
@@ -420,6 +426,15 @@ def maintain_downloads(qb,state,now=None):
             slots-=1
             continue
         idle=now-t['last_progress_at']
+        # An advertised seed can stay connected while never sending data.
+        # Yield its slot too, without discarding downloaded pieces.
+        if (q['state']=='stalledDL' and progress<1 and not q.get('dlspeed',0)
+            and idle>=900 and now>=t.get('retry_grace_until',0)):
+            qb.call('torrents/stop',{'hashes':h})
+            t.update(status='waiting_for_peers',retry_after=now+1800,
+                     last_error='15分钟没有实际进度；轮换下载名额，保留已有文件')
+            slots-=1
+            continue
         if q['state']=='stalledDL' and progress<1 and not q.get('dlspeed',0) and q.get('availability',0)<1 and not q.get('num_seeds',0):
             if idle>=300 and now-t.get('last_reannounce_at',0)>=600:
                 qb.call('torrents/reannounce',{'hashes':h});t['last_reannounce_at']=now
