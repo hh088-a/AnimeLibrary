@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as td,patch.object(batch,'DATA',Path(td)):
     assert state['tasks']['a'*40]['status']=='downloading'
     batch.maintain_downloads(q,state,now=4804)
     assert state['tasks']['a'*40]['status']=='downloading'
-    batch.maintain_downloads(q,state,now=4982)
+    batch.maintain_downloads(q,state,now=5102)
     assert state['tasks']['a'*40]['status']=='waiting_for_peers'
     state={'subjects':{},'tasks':{'a'*40:task()}}
     q=QB([torrent(state='downloading',num_seeds=3,dlspeed=1024,time_active=1000,downloaded=2*1024**2,amount_left=50*1024**2)])

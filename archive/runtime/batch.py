@@ -14,7 +14,7 @@ DOWNLOADS=HERE/'downloads'; DOWNLOADS.mkdir(exist_ok=True)
 CLOUD_MOUNT=Path('X:/动漫')
 QB='http://127.0.0.1:8098'
 GIB=2**30
-MAX_ACTIVE=100
+MAX_ACTIVE=500
 STAGING_GIB=160
 CHUNK_GIB=5
 TODAY='2026-11-03'
@@ -388,6 +388,10 @@ def maintain_downloads(qb,state,now=None):
     now=time.time() if now is None else now
     torrents={t['hash']:t for t in qb.call('torrents/info')}
     slots=active_downloads(state)
+    # Repeated retries must leave capacity for reviewed fresh sources/chunks.
+    retry_ceiling=max(1,MAX_ACTIVE-min(25,MAX_ACTIVE//10))
+    per_subject=collections.Counter(t.get('subject_id') for t in state['tasks'].values()
+        if t['status'] not in {'cloud_verified','abandoned'}|WAITING_STATUSES)
     # Release idle slots before choosing retries, rather than favoring ledger order.
     def retry_order(pair):
         key,t=pair;q=torrents.get(t.get('source_hash',key),{})
@@ -409,21 +413,48 @@ def maintain_downloads(qb,state,now=None):
         if progress>old+1e-7 or q.get('dlspeed',0)>0:t['last_progress_at']=now
         t['last_progress']=progress
         if t['status']=='waiting_for_peers':
-            if now>=t.get('retry_after',now+1800) and slots<MAX_ACTIVE and storage_ready(state,max(0,t['selected_bytes']-int(t['selected_bytes']*min(1,max(0,progress))))):
+            if (now>=t.get('retry_after',now+1800) and slots<retry_ceiling
+                and per_subject[t.get('subject_id')]<4
+                and storage_ready(state,max(0,t['selected_bytes']-int(t['selected_bytes']*min(1,max(0,progress)))))):
                 qb.call('torrents/start',{'hashes':h})
                 qb.call('torrents/reannounce',{'hashes':h})
-                t.update(status='downloading',last_progress_at=now,retry_grace_until=now+180);slots+=1
+                t.update(status='downloading',last_progress_at=now,retry_grace_until=now+300,
+                         rate_window_started_at=now,rate_window_downloaded=q.get('downloaded',0));slots+=1
+                per_subject[t.get('subject_id')]+=1
             continue
         if t['status']=='needs_attention':continue
+        # Use actual payload delta rather than lifetime average or tiny protocol
+        # trickles. Keep a full five-minute connection/measurement window.
+        downloaded=q.get('downloaded',0)
+        window_at=t.get('rate_window_started_at')
+        window_bytes=t.get('rate_window_downloaded',downloaded)
+        if window_at is None or downloaded<window_bytes or now<window_at:
+            t.update(rate_window_started_at=now,rate_window_downloaded=downloaded)
+        elif now-window_at>=300:
+            recent=(downloaded-window_bytes)/max(1,now-window_at)
+            t['recent_payload_kib_s']=round(recent/1024,2)
+            if (recent<16*1024 and q.get('dlspeed',0)<16*1024 and progress<1
+                and q.get('amount_left',0)>100*1024**2 and now>=t.get('retry_grace_until',0)):
+                failures=min(5,t.get('low_rate_retries',0)+1)
+                delay=min(6*3600,1800*2**(failures-1))
+                qb.call('torrents/stop',{'hashes':h})
+                t.update(status='waiting_for_peers',retry_after=now+delay,low_rate_retries=failures,
+                    last_error=f'最近5分钟实际供数低于16 KiB/s；退避{delay//60}分钟，保留部分文件')
+                slots-=1
+                per_subject[t.get('subject_id')]-=1
+                continue
+            if recent>=16*1024:t['low_rate_retries']=0
+            t.update(rate_window_started_at=now,rate_window_downloaded=downloaded)
         elapsed=q.get('time_active',0)
         average=q.get('downloaded',0)/elapsed if elapsed>0 else 0
         t['observed_average_kib_s']=round(average/1024,2)
         # A peer may advertise a complete copy while choking all real data.
         # Do not let protocol trickles keep a useless source active forever.
-        if now>=t.get('retry_grace_until',0) and elapsed>=900 and average<16*1024 and q.get('dlspeed',0)<16*1024 and q.get('amount_left',0)>100*1024**2:
+        if 'recent_payload_kib_s' not in t and now>=t.get('retry_grace_until',0) and elapsed>=900 and average<16*1024 and q.get('dlspeed',0)<16*1024 and q.get('amount_left',0)>100*1024**2:
             qb.call('torrents/stop',{'hashes':h})
             t.update(status='waiting_for_peers',retry_after=now+1800,last_error='运行至少15分钟且平均低于16 KiB/s；慢源暂缓，保留已下载文件')
             slots-=1
+            per_subject[t.get('subject_id')]-=1
             continue
         idle=now-t['last_progress_at']
         # An advertised seed can stay connected while never sending data.
@@ -434,6 +465,7 @@ def maintain_downloads(qb,state,now=None):
             t.update(status='waiting_for_peers',retry_after=now+1800,
                      last_error='15分钟没有实际进度；轮换下载名额，保留已有文件')
             slots-=1
+            per_subject[t.get('subject_id')]-=1
             continue
         if q['state']=='stalledDL' and progress<1 and not q.get('dlspeed',0) and q.get('availability',0)<1 and not q.get('num_seeds',0):
             if idle>=300 and now-t.get('last_reannounce_at',0)>=600:
@@ -442,6 +474,7 @@ def maintain_downloads(qb,state,now=None):
                 qb.call('torrents/stop',{'hashes':h})
                 t.update(status='waiting_for_peers',retry_after=now+1800,last_error='15分钟无进度且无完整做种；保留部分文件，稍后重试')
                 slots-=1
+                per_subject[t.get('subject_id')]-=1
     save_state(state)
 
 def cloud_staging_name(task,h):
@@ -504,8 +537,13 @@ def qb_primary_tick(qb,state):
     covered.update(t.get('source_hash',k).split(':')[0] for k,t in state['tasks'].items())
     covered.update(x['candidate']['task_key'].split(':')[0] for x in state.get('chunk_queue',[]))
     errors=state.setdefault('qb_primary_errors',{})
+    title_active=collections.Counter(t['subject_id'] for t in state['tasks'].values()
+        if t['status'] not in {'cloud_verified','abandoned'}|WAITING_STATUSES)
     for subject,candidate,h in cloud.candidates(catalog):
         if subject['id'] in covered_subjects:continue
+        # Spread fresh attempts across titles, instead of filling the entire
+        # expanded queue with consecutive episodes of one weak swarm.
+        if title_active[subject['id']]>=4:continue
         if h in covered or candidate.get('magnet_only'):continue
         if time.time()<errors.get(h,{}).get('retry_after',0):continue
         if not candidate.get('manual_verified') and cloud.identity_conflict(subject,candidate,catalog):continue

@@ -122,13 +122,21 @@ def report(state):
     (batch.OUT/'115自动整理状态.md').write_text('\n'.join(lines)+'\n',encoding='utf8')
 
 def reviewed_subject(subject,items):
-    """Translate only two reviewed release numbering conventions."""
+    """Translate explicitly reviewed release numbering conventions."""
     s=dict(subject)
     videos=[x for x in items if not x['dir'] and P(x['name']).suffix.lower() in organizer.VIDEO]
     if not videos:return s
     nums=[organizer.episode(x['name'],1) for x in videos]
     if not all(nums):return s
     numbers=[n[1] for n in nums]
+    zero_sources={475032:'Kamitsubaki City Under Construction - ',566600:'Towa no Yuugure - '}
+    if (s['id'] in zero_sources and all(zero_sources[s['id']] in x['name'] for x in videos)
+        and all(0<=n<=12 for n in numbers)):
+        # Broadcast episode zero is the prologue; regular numbering stays 1-12.
+        s.update(eps=12,_review_special_episode_map={0:(0,1)},_review_allow_gaps=True)
+    if (s['id']==529431 and all('Dan Da Dan S2 - ' in x['name'] for x in videos)
+        and all(1<=n<=12 for n in numbers)):
+        s.update(_review_episode_offset=12,_review_allow_gaps=True)
     if s['id']==441939 and all('Kimetsu no Yaiba - ' in x['name'] for x in videos) and all(56<=n<=63 for n in numbers):
         s['_review_episode_offset']=-55
     if s['id']==457956 and all('TP Bon - ' in x['name'] for x in videos) and all(13<=n<=24 for n in numbers):

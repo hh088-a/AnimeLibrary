@@ -115,6 +115,8 @@ def classify(s,v,container):
             folder=TV_FOLDERS.get(tmdb,clean(show)+(f' ({year})' if year else '')+f' [tmdbid-{tmdb}]')
             return '/剧集/'+folder+'/Season 00/'+clean(show)+' - '+special[0].strip(),'episode'
         if s.get('_review_episode_offset') is not None:parsed=(parsed[0],parsed[1]+int(s['_review_episode_offset']))
+        special=s.get('_review_special_episode_map',{}).get(parsed[1])
+        if special is not None:parsed=tuple(special)
         return tv_target(show,year,mapping.split('/')[1],*parsed),'episode'
     return None
 
@@ -142,7 +144,9 @@ def build(records=None,persist=True):
         missing_numbers=[]
         regular=[x for x in transfers if x['kind']=='episode' and '/Season 00/' not in x['destination']]
         if s['id']!=1728 and (s.get('tmdb') or '').startswith('tv/'):
-            assert 0<len(regular)<=expected,(s['id'],'episode count',len(regular),expected)
+            special_only=(not regular and bool(s.get('_review_special_episode_map'))
+                          and bool(transfers) and all(x['kind']=='episode' and '/Season 00/' in x['destination'] for x in transfers))
+            assert 0<len(regular)<=expected or special_only,(s['id'],'episode count',len(regular),expected)
             numbers=sorted(int(re.search(r'E(\d+)\.',x['destination'])[1]) for x in regular)
             explicit_start=re.search(r'/episode/(\d+)',s.get('tmdb') or '')
             start=int(explicit_start[1]) if explicit_start else 1

@@ -1,23 +1,23 @@
 {
-  "captured_at": "2026-11-05T07:45:48+08:00",
-  "report_updated_at": "2026-11-05T07:45:44",
-  "verified_release_groups": 746,
-  "episode_or_ova_files": 6720,
+  "captured_at": "2026-11-05T10:58:16+08:00",
+  "report_updated_at": "2026-11-05T10:57:35",
+  "verified_release_groups": 951,
+  "episode_or_ova_files": 7496,
   "movie_files": 37,
-  "external_subtitle_files": 1985,
-  "verified_original_files": 12467,
+  "external_subtitle_files": 2081,
+  "verified_original_files": 13364,
   "counts_are": "verified resource groups and files; not unique complete anime titles",
   "target_catalog_subjects": 1594,
   "local_task_states": {
-    "cloud_verified": 693,
+    "cloud_verified": 758,
     "abandoned": 1,
     "source_replaced": 5,
-    "waiting_for_peers": 417,
-    "downloading": 94,
-    "upload_pending": 6
+    "waiting_for_peers": 431,
+    "downloading": 101,
+    "upload_pending": 3
   },
-  "qb_checked_at": "2026-11-05T07:38:09",
-  "qb_verified_selected_bytes": 1559990022451,
+  "qb_checked_at": "2026-11-05T10:57:34",
+  "qb_verified_selected_bytes": 1623832996733,
   "cloud_quota_stop_present": true,
-  "held_subjects": 1
+  "held_subjects": 0
 }

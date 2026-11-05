@@ -23,5 +23,26 @@
     "episodes": 33,
     "subtitles": 56,
     "original_files_verified": 151
+  },
+  "later_morning": {
+    "offline_test_scripts": 17,
+    "manual_batches": 9,
+    "qb_download_limit": 500,
+    "max_retries_per_title": 4,
+    "rate_window_seconds": 300,
+    "backoff_minutes": [
+      30,
+      60,
+      120,
+      240,
+      360
+    ],
+    "qb_active_limit": 504,
+    "original_files_verified": 34,
+    "global_connections": 3000,
+    "connection_attempts_per_second": 100,
+    "manual_videos": 32,
+    "fresh_capacity": 25,
+    "held_after_manual_review": 0
   }
 }
